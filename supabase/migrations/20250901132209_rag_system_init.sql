@@ -1,22 +1,13 @@
 -- ============================================================
 -- Postgres RAG Schema (Resources/Parsed/Chunks/Images + Embeddings)
 -- Author: ChatGPT (Ginger) + Claude Code
--- Date: 2025-08-29 | Updated: 2025-09-01
+-- Date: 2025-08-29
 -- ------------------------------------------------------------
 -- 使用說明：
 -- 1) 在目標資料庫執行本檔：\i init_schema.sql
 -- 2) 若尚未安裝外掛：CREATE EXTENSION 會自動忽略已存在的外掛
 -- 3) 若你的 embedding 維度不是 1536，請將 vector(1536) 改為你的維度
 -- 4) chunk_embeddings 為可選表，若你只使用單一模型，可不使用
---
--- 🔧 最新更新 (2025-09-01)：
--- • 修正 pgvector extension 名稱 (pgvector -> vector)
--- • 使用 pgcrypto 的 gen_random_uuid() 提升效能
--- • 實作 fingerprint 機制取代 generated UUID (避免 immutability 問題)
--- • 修正所有函數語法 ($$ 分隔符問題)
--- • 修正 PostgreSQL policy 語法 (移除不支援的 IF NOT EXISTS)
--- • 🛡️ 安全強化：所有函數添加 SET search_path = '' 防止注入攻擊
--- • 使用 EXTRACT() 取代 to_char() 確保 generated column 的 immutability
 -- ============================================================
 
 -- ---- Extensions ------------------------------------------------------------
@@ -52,9 +43,6 @@ CREATE TABLE IF NOT EXISTS media_sources (
 
 -- =============================================================================
 -- 2) resources：來源主檔（SSOT）
--- • 使用 gen_random_uuid() 作為主鍵提升效能
--- • fingerprint (SHA256) 作為業務唯一性約束，基於 source_id + content_header + content_time
--- • GENERATED 列使用 EXTRACT() 確保 immutability，避免外鍵引用問題
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS resources (
   uuid              uuid PRIMARY KEY NOT NULL DEFAULT gen_random_uuid(),
@@ -363,7 +351,6 @@ CREATE POLICY "Service role full access to chunk_embeddings" ON chunk_embeddings
 
 -- =============================================================================
 -- 7) 實用函數
--- 🛡️ 安全：所有函數使用 SET search_path = '' 防止注入攻擊
 -- =============================================================================
 
 -- 向量搜索函數

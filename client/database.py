@@ -5,8 +5,8 @@ SQLAlchemy 資料庫模型和管理器
 """
 
 from typing import Optional, List, Dict, Any, Union
-from sqlalchemy import Column, String, Text, DateTime, Integer, Boolean, Enum, LargeBinary, CheckConstraint, UniqueConstraint, Index
-from sqlalchemy.dialects.postgresql import UUID, TSVECTOR
+from sqlalchemy import Column, String, Text, DateTime, Integer, Boolean, Enum, LargeBinary, CheckConstraint, UniqueConstraint, Index, ForeignKey
+from sqlalchemy.dialects.postgresql import UUID, TSVECTOR, JSONB
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session, relationship
 from sqlalchemy.sql import func
@@ -26,29 +26,85 @@ import enum
 
 # Note: Removed ResourceFileType and SrcCategory enums in favor of flexible text types
 
+class MediaSource(Base):
+    """媒體來源主檔表"""
+    __tablename__ = 'media_sources'
+    
+    id = Column(String, primary_key=True)
+    name = Column(String, nullable=False)
+    description = Column(Text, nullable=False)
+    category = Column(Text)
+    lang = Column(Text, CheckConstraint("lang ~ '^[a-z]{2}(-[A-Z]{2})?$'"))
+    config = Column(JSONB, default={})
+    created_at = Column(DateTime(timezone=True), nullable=False, default=func.now())
+    
+    # 關聯
+    resources = relationship("Resource", back_populates="media_source")
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """轉換為字典"""
+        return {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description,
+            'category': self.category,
+            'lang': self.lang,
+            'config': self.config,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+
+class ParseSetting(Base):
+    """解析設定管理表"""
+    __tablename__ = 'parse_settings'
+    
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False, unique=True)
+    description = Column(Text)
+    config = Column(JSONB, nullable=False, default={})
+    created_at = Column(DateTime(timezone=True), nullable=False, default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=func.now(), onupdate=func.now())
+    
+    # 關聯
+    parsed_artifacts = relationship("ParsedArtifact", back_populates="parse_setting")
+
+
+class ChunkSetting(Base):
+    """分塊設定管理表"""
+    __tablename__ = 'chunk_settings'
+    
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False, unique=True)
+    description = Column(Text)
+    config = Column(JSONB, nullable=False, default={})
+    created_at = Column(DateTime(timezone=True), nullable=False, default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=func.now(), onupdate=func.now())
+    
+    # 關聯
+    chunks = relationship("Chunk", back_populates="chunk_setting")
+
 
 class Resource(Base):
     """資源主檔表"""
     __tablename__ = 'resources'
     
-    uuid = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    # 注意：這裡使用 generated UUID，實際應用中可能需要特殊處理
+    uuid = Column(UUID(as_uuid=True), primary_key=True)
     local_src_url = Column(Text)
     remote_src_url = Column(Text, unique=True)
-    content_time = Column(DateTime(timezone=True))
-    content_header = Column(Text)
-    content_authors = Column(Text)
-    src_name = Column(Text)
-    src_description = Column(Text)
-    src_category = Column(Text)
+    content_time = Column(DateTime(timezone=True), nullable=False)
+    content_header = Column(Text, nullable=False)
+    content_authors = Column(JSONB)
+    source_id = Column(String, ForeignKey('media_sources.id'), nullable=False)
     file_type = Column(Text)
     need_parsed = Column(Boolean, nullable=False, default=False)
     crawl_completed = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime(timezone=True), nullable=False, default=func.now())
     updated_at = Column(DateTime(timezone=True), nullable=False, default=func.now(), onupdate=func.now())
     content_sha256 = Column(LargeBinary)
-    lang = Column(Text)
     
     # 關聯
+    media_source = relationship("MediaSource", back_populates="resources")
     parsed_artifacts = relationship("ParsedArtifact", back_populates="resource", cascade="all, delete-orphan")
     images = relationship("Image", back_populates="resource")
     chunks = relationship("Chunk", back_populates="resource", cascade="all, delete-orphan")
@@ -62,15 +118,12 @@ class Resource(Base):
             'content_time': self.content_time.isoformat() if self.content_time else None,
             'content_header': self.content_header,
             'content_authors': self.content_authors,
-            'src_name': self.src_name,
-            'src_description': self.src_description,
-            'src_category': self.src_category,
+            'source_id': self.source_id,
             'file_type': self.file_type,
             'need_parsed': self.need_parsed,
             'crawl_completed': self.crawl_completed,
             'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
-            'lang': self.lang
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
 
 
@@ -79,18 +132,20 @@ class ParsedArtifact(Base):
     __tablename__ = 'parsed_artifacts'
     
     uuid = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    resource_uuid = Column(UUID(as_uuid=True), nullable=False)
+    resource_uuid = Column(UUID(as_uuid=True), ForeignKey('resources.uuid', ondelete='CASCADE'), nullable=False)
+    source_id = Column(String, ForeignKey('media_sources.id'), nullable=False)
     local_parsed_url = Column(Text)
-    parse_setting = Column(Integer, nullable=False)
+    parse_setting_id = Column(Integer, ForeignKey('parse_settings.id'), nullable=False)
     created_at = Column(DateTime(timezone=True), nullable=False, default=func.now())
     updated_at = Column(DateTime(timezone=True), nullable=False, default=func.now(), onupdate=func.now())
     
     # 關聯
     resource = relationship("Resource", back_populates="parsed_artifacts")
+    parse_setting = relationship("ParseSetting", back_populates="parsed_artifacts")
     chunks = relationship("Chunk", back_populates="parsed_artifact")
     
     __table_args__ = (
-        UniqueConstraint('resource_uuid', 'parse_setting', name='uq_resource_parse_setting'),
+        UniqueConstraint('resource_uuid', 'parse_setting_id', name='uq_resource_parse_setting'),
     )
 
 
@@ -99,7 +154,7 @@ class Image(Base):
     __tablename__ = 'images'
     
     uuid = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    resource_uuid = Column(UUID(as_uuid=True))
+    resource_uuid = Column(UUID(as_uuid=True), ForeignKey('resources.uuid', ondelete='SET NULL'))
     local_image_url = Column(Text)
     remote_image_url = Column(Text, unique=True)
     description = Column(Text)
@@ -120,12 +175,13 @@ class Chunk(Base):
     __tablename__ = 'chunks'
     
     uuid = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    resource_uuid = Column(UUID(as_uuid=True), nullable=False)
-    parsed_uuid = Column(UUID(as_uuid=True))
-    image_uuid = Column(UUID(as_uuid=True))
+    resource_uuid = Column(UUID(as_uuid=True), ForeignKey('resources.uuid', ondelete='CASCADE'), nullable=False)
+    parsed_uuid = Column(UUID(as_uuid=True), ForeignKey('parsed_artifacts.uuid', ondelete='SET NULL'))
+    image_uuid = Column(UUID(as_uuid=True), ForeignKey('images.uuid', ondelete='SET NULL'))
+    source_id = Column(String, ForeignKey('media_sources.id'), nullable=False)
     page = Column(Integer, CheckConstraint('page IS NULL OR page >= 0'))
     chunk_order = Column(Integer, CheckConstraint('chunk_order >= 0'), nullable=False)
-    chunk_setting = Column(Integer)
+    chunk_setting_id = Column(Integer, ForeignKey('chunk_settings.id'))
     token_size = Column(Integer, CheckConstraint('token_size IS NULL OR token_size >= 0'))
     chunking_text = Column(Text, nullable=False)
     description = Column(Text)
@@ -145,6 +201,7 @@ class Chunk(Base):
     resource = relationship("Resource", back_populates="chunks")
     parsed_artifact = relationship("ParsedArtifact", back_populates="chunks")
     image = relationship("Image", back_populates="chunks")
+    chunk_setting = relationship("ChunkSetting", back_populates="chunks")
     embeddings = relationship("ChunkEmbedding", back_populates="chunk", cascade="all, delete-orphan")
     
     __table_args__ = (
@@ -167,7 +224,7 @@ class Chunk(Base):
             'image_uuid': str(self.image_uuid) if self.image_uuid else None,
             'page': self.page,
             'chunk_order': self.chunk_order,
-            'chunk_setting': self.chunk_setting,
+            'chunk_setting_id': self.chunk_setting_id,
             'token_size': self.token_size,
             'chunking_text': self.chunking_text,
             'description': self.description,
@@ -180,7 +237,7 @@ class ChunkEmbedding(Base):
     """分塊嵌入向量表（多模型支援）"""
     __tablename__ = 'chunk_embeddings'
     
-    chunk_uuid = Column(UUID(as_uuid=True), nullable=False, primary_key=True)
+    chunk_uuid = Column(UUID(as_uuid=True), ForeignKey('chunks.uuid', ondelete='CASCADE'), nullable=False, primary_key=True)
     kind = Column(String, CheckConstraint("kind IN ('chunk', 'description')"), nullable=False, primary_key=True)
     model = Column(String, nullable=False, primary_key=True)
     dim = Column(Integer, nullable=False)
@@ -226,10 +283,10 @@ class DatabaseManager:
         """根據 URL 取得資源"""
         return self.session.query(Resource).filter_by(remote_src_url=remote_url).first()
     
-    def get_resources_by_category(self, category: str, 
+    def get_resources_by_source(self, source_id: str, 
                                 limit: int = 100) -> List[Resource]:
-        """根據分類取得資源"""
-        return self.session.query(Resource).filter_by(src_category=category).limit(limit).all()
+        """根據來源取得資源"""
+        return self.session.query(Resource).filter_by(source_id=source_id).limit(limit).all()
     
     def update_resource(self, resource_uuid: Union[str, uuid.UUID], **kwargs) -> Optional[Resource]:
         """更新資源"""
@@ -362,16 +419,16 @@ class DatabaseManager:
         stats['images_count'] = self.session.query(Image).count()
         stats['parsed_artifacts_count'] = self.session.query(ParsedArtifact).count()
         
-        # 按分類統計
-        category_stats = {}
-        categories = self.session.query(Resource.src_category).distinct().filter(Resource.src_category.isnot(None)).all()
-        for category_row in categories:
-            category = category_row[0]
-            count = self.session.query(Resource).filter_by(src_category=category).count()
+        # 按來源統計
+        source_stats = {}
+        sources = self.session.query(Resource.source_id).distinct().filter(Resource.source_id.isnot(None)).all()
+        for source_row in sources:
+            source = source_row[0]
+            count = self.session.query(Resource).filter_by(source_id=source).count()
             if count > 0:
-                category_stats[category] = count
+                source_stats[source] = count
         
-        stats['by_category'] = category_stats
+        stats['by_source'] = source_stats
         
         return stats
     
