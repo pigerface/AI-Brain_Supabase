@@ -1,21 +1,14 @@
-"""
-Supabase Local Client Package
+"""極簡 Supabase 客戶端 - 專注業務邏輯"""
 
-提供 Supabase 本地部署的 Python 客戶端封裝，包含：
-- SQLAlchemy 資料庫連接
-- Supabase SDK 封裝
-- 配置管理
-"""
-
-from .config import SupabaseConfig
-from .database import DatabaseManager, get_db_session
 from .client import SupabaseClient
+from .config import get_supabase_client
+from .domain import ResourceService, SearchService
 
 __all__ = [
-    'SupabaseConfig',
-    'DatabaseManager',
-    'get_db_session',
-    'SupabaseClient'
+    'SupabaseClient',
+    'get_supabase_client', 
+    'ResourceService',
+    'SearchService'
 ]
 
-__version__ = '1.0.0'
+__version__ = '3.0.0'
