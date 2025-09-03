@@ -1,0 +1,34 @@
+# Docker volumes - contains database data files
+volumes/db/data/
+volumes/db/data/*
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Docker Compose override
+docker-compose.override.yml
+
+# Backup files
+backup-*/
+*.bak
+
+# Logs
+logs/
+*.log
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
