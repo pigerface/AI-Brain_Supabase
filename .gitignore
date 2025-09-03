@@ -1,6 +1,5 @@
 # Docker volumes - contains database data files
 volumes/db/data/
-volumes/db/data/*
 
 # Environment files
 .env
