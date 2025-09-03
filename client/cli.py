@@ -10,7 +10,7 @@ import sys
 from typing import Optional, List, Dict, Any
 from pathlib import Path
 
-from .client import create_client, SupabaseClient
+from .supabase_client import create_client, SupabaseClient
 from .config import SupabaseConfig
 # Note: SrcCategory and ResourceFileType enums removed, using string values directly
 
